@@ -117,8 +117,6 @@ class Client
                 $path = $path . (false === strpos($path, '?') ? '?' : '&') . http_build_query($options['query']);
             }
 
-            echo "$method, $uri, $path\n";
-
             $headers = [];
             if (isset($options['headers'])) {
                 $headers = $options['headers'];
