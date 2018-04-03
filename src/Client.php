@@ -117,8 +117,6 @@ class Client
                 $path = $path . (false === strpos($path, '?') ? '?' : '&') . http_build_query($options['query']);
             }
 
-            echo "$method, $uri, $path\n";
-
             $headers = [];
             if (isset($options['headers'])) {
                 $headers = $options['headers'];
@@ -168,23 +166,26 @@ class Client
             $traceId, $spanId, $childSpanId, $sTime, $rTime, $time, $uri, $error
         ));
 
-        // 6. 发送到中心
-        try {
-            if (app()->has('traceClient')) {
-                app()->getShared('traceClient')->send([
-                    'traceId'     => $traceId,
-                    'childSpanId' => $childSpanId,
-                    'spanId'      => $spanId,
-                    'timestamp'   => $sTime,
-                    'duration'    => $time,
-                    'cs'          => $sTime,
-                    'cr'          => $rTime,
-                    'uri'         => $uri,
-                    'error'       => $error,
-                ]);
+        // 6. 发送到中心 (如果有no_trace设置，则不发送)
+        if (!isset($options['no_trace']) || !$options['no_trace']) {
+            try {
+
+                if (app()->has('traceClient')) {
+                    app()->getShared('traceClient')->send([
+                        'traceId'     => $traceId,
+                        'childSpanId' => $childSpanId,
+                        'spanId'      => $spanId,
+                        'timestamp'   => $sTime,
+                        'duration'    => $time,
+                        'cs'          => $sTime,
+                        'cr'          => $rTime,
+                        'uri'         => $uri,
+                        'error'       => $error,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                app()->getLogger('trace')->error(sprintf("[TCPClient] Send to trace server failed: %s", $e->getMessage()));
             }
-        } catch (\Exception $e) {
-            app()->getLogger('trace')->error(sprintf("[TCPClient] Send to trace server failed: %s", $e->getMessage()));
         }
 
         // 7. 返回结果
