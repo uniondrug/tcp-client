@@ -5,6 +5,7 @@
 
 namespace Uniondrug\TcpClient;
 
+use Phalcon\Di;
 use Phalcon\Http\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Uniondrug\Server\Servitization\Client\Client as SwooleClient;
@@ -78,7 +79,9 @@ class Client
     {
         // 1. 提取当前的Trace信息，并且附加在请求头中
         /* @var RequestInterface $request */
-        $request = app()->getShared('request');
+        $request = Di::getDefault()->getShared('request');
+        $service = Di::getDefault()->getConfig()->path('app.appName', '');
+
         $traceId = $request->getHeader('X-TRACE-ID');
         if ($traceId) {
             $options['headers']['X-TRACE-ID'] = $traceId;
@@ -117,9 +120,11 @@ class Client
                 $path = $path . (false === strpos($path, '?') ? '?' : '&') . http_build_query($options['query']);
             }
 
-            $headers = [];
+            $headers = [
+                'Host' => $host,
+            ];
             if (isset($options['headers'])) {
-                $headers = $options['headers'];
+                $headers = array_merge($headers, $options['headers']);
             }
 
             $timeout = $this->timeout;
@@ -140,6 +145,8 @@ class Client
                 ->setHeaders($headers)
                 ->setTimeout($timeout)
                 ->send($data);
+
+            // Http, close
             if ($info['scheme'] === 'http') {
                 $this->close($server);
             }
@@ -162,16 +169,17 @@ class Client
         $time = $rTime - $sTime;
 
         // 5. LOG
-        app()->getLogger('trace')->debug(sprintf("[TCPClient] traceId=%s, spanId=%s, childSpanId=%s, ss=%s, sr=%s, t=%s, uri=%s, error=%s",
-            $traceId, $spanId, $childSpanId, $sTime, $rTime, $time, $uri, $error
+        Di::getDefault()->getLogger('trace')->debug(sprintf("[TCPClient] service=%s, traceId=%s, spanId=%s, childSpanId=%s, ss=%s, sr=%s, t=%s, uri=%s, error=%s",
+            $service, $traceId, $spanId, $childSpanId, $sTime, $rTime, $time, $uri, $error
         ));
 
         // 6. 发送到中心 (如果有no_trace设置，则不发送)
         if (!isset($options['no_trace']) || !$options['no_trace']) {
             try {
 
-                if (app()->has('traceClient')) {
-                    app()->getShared('traceClient')->send([
+                if (Di::getDefault()->has('traceClient')) {
+                    Di::getDefault()->getShared('traceClient')->send([
+                        'service'     => $service,
                         'traceId'     => $traceId,
                         'childSpanId' => $childSpanId,
                         'spanId'      => $spanId,
@@ -184,7 +192,7 @@ class Client
                     ]);
                 }
             } catch (\Exception $e) {
-                app()->getLogger('trace')->error(sprintf("[TCPClient] Send to trace server failed: %s", $e->getMessage()));
+                Di::getDefault()->getLogger('trace')->error(sprintf("[TCPClient] Send to trace server failed: %s", $e->getMessage()));
             }
         }
 
@@ -205,10 +213,16 @@ class Client
      */
     public function getConnection($server)
     {
+        $keep = !function_exists('app');
+        $sync = false; // 只使用同步模式
+
         if (!isset($this->clients[$server])) {
-            $keep = !function_exists('app');
-            $sync = false; // 只使用同步模式
             $this->clients[$server] = new SwooleClient($server, $sync, $keep);
+        } else {
+            if (!$this->clients[$server]->ping()) {
+                unset($this->clients[$server]);
+                $this->clients[$server] = new SwooleClient($server, $sync, $keep);
+            }
         }
 
         return $this->clients[$server];
