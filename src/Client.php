@@ -83,19 +83,16 @@ class Client
         $service = Di::getDefault()->getConfig()->path('app.appName', '');
 
         $traceId = $request->getHeader('X-TRACE-ID');
-        if ($traceId) {
-            $options['headers']['X-TRACE-ID'] = $traceId;
-        } else {
+        if (!$traceId) {
             $traceId = Di::getDefault()->getShared('security')->getRandom()->hex(10);
-
         }
+        $options['headers']['X-TRACE-ID'] = $traceId;
 
         $spanId = $request->getHeader('X-SPAN-ID');
-        if ($spanId) {
-            $options['headers']['X-SPAN-ID'] = $spanId;
-        } else {
+        if (!$spanId) {
             $spanId = Di::getDefault()->getShared('security')->getRandom()->hex(10);
         }
+        $options['headers']['X-SPAN-ID'] = $spanId;
 
         // 2. 发起请求
         $sTime = microtime(1);
