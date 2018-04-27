@@ -86,14 +86,15 @@ class Client
         if ($traceId) {
             $options['headers']['X-TRACE-ID'] = $traceId;
         } else {
-            $traceId = '';
+            $traceId = Di::getDefault()->getShared('security')->getRandom()->hex(10);
+
         }
 
         $spanId = $request->getHeader('X-SPAN-ID');
         if ($spanId) {
             $options['headers']['X-SPAN-ID'] = $spanId;
         } else {
-            $spanId = '';
+            $spanId = Di::getDefault()->getShared('security')->getRandom()->hex(10);
         }
 
         // 2. 发起请求
